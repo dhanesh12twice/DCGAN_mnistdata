@@ -1,0 +1,172 @@
+import warnings
+warnings.filterwarnings("ignore") // ignoring warnings
+
+from keras.datasets  import mnist
+from tensorflow import keras
+from keras.layers import *
+from keras.models import Sequential,Model
+from keras.optimizers import Adam
+from keras.layers import LeakyReLU
+
+
+import numpy an np
+import matplotlib.pyplot as plt
+
+2.
+ (x_train, _ ) ,(_,_) = mnist.load_data()
+x_train.shape  //(60000,28,28)
+
+3. x_train =( x_train-127.5)/127.5  //normalizing max to 1 and min to -1           
+4.    
+TOTAL_EPOCHS = 50
+BATCH_SIZE = 256
+HALF_BATCH = 128
+
+NO_OF_BATCHES = int(x_train.shape[0] / BATCH_SIZE)
+
+NOISE_DIM =100
+adam = Adam(lr = 2e-4, beta_1 = 0.5 )
+
+5.//Generator model: Upsampling
+
+generator = Sequential()
+generator.add(Dense(units =7*7* 128 , input_shape = (NOISE_DIM,)))
+generator.add(Reshape((7,7,128)))
+generator.add(LeakyReLU(0.2))
+generator.add(BatchNormalization())
+
+5.// Perform transposing from (7,7,128) -> (14,14,64) (upsampling portion)
+
+generator.add(Conv2DTranspose(64,(3,3), strides = (2,2) ,padding = 'same'))
+generator.add(LeakyReLU(0.2))
+generator.add(BatchNormalization())
+
+6. //Again transposing from (14,14,64) -> (28,28,1) (upsampling to final output)
+
+generator.add(Conv2DTranspose(1,(3,3), strides = (2,2) ,padding = 'same',activation = 'tanh'))
+
+generator.compile(loss = keras.losses.binary_crossentropy, optimizer= adam)
+
+generator.summary()
+
+
+6. Discriminator model (Downsampling) (28,28,1)  -> (14,14,64)
+
+descriminator = Sequential()
+descriminator.add(Conv2D(64,kernel_size=(3,3) ,strides = (2,2) ,padding = 'same', input_shape = (28,28,1)))
+
+descriminator.add(LeakyReLU(0.2))
+
+// downsampling   (14,14,64)  -> (7,7,128)
+
+descriminator.add(Conv2D(128,kernel_size=(3,3) ,strides = (2,2) ,padding = 'same')))
+
+descriminator.add(LeakyReLU(0.2))
+
+// (7,7,128) -> 6272  (scalar output as final output)
+
+descriminator.add(Flatten())
+descriminator.add(Dense(100))
+descriminator.add(LeakyReLU(0.2))
+
+descriminator.add(Dense(1,activation= 'sigmoid'))
+
+descriminator.compile(loss = keras.losses.binary_crossentropy, optimizer= adam)
+descriminator.summary()
+
+
+7. //Combine both the models and proceed  with training.
+
+descriminator.trainable = False
+gan_input = Input(shape = (NOISE_DIM, ))
+generated_img = generator(gan_input )
+gan_output = descriminator(generated_img)
+
+//Functional API
+
+model = Model(inputs = gan_input,  outputs= gan_output)
+model.compile(loss ="binary_crossentropy",optimizer = adam)
+
+model.summary()  //commented once finished
+
+8 . 
+  x_train = x_train.reshape(-1,28,28,1)  
+  x_train.shape // (60000,28,28,1)  --- 60K batch size , (28,28) - image size
+  //(1 for channel)
+
+9.def display_images(samples = 25):
+   noise = np.random.normal(0,1,size=(samples,NOISE_DIM))
+   generated_img = generator.predict(noise) 
+
+   plt.figure(figsize = (10,10)) 
+   for i in range(samples):
+      plt.subplot(5,5,i+1)
+      plt.imshow(generated_img[i].reshape(28,28), cmap = "gray")
+      plt.axis('off')
+   plt.show()
+
+ 10.//Training Loop
+
+d_losses = []
+g_losses = []
+
+for epoch in range(TOTAL_EPOCHS):
+  epoch_d_loss = 0.0
+  epoch_g_loss = 0.0
+
+ //Mini batch gradient descent
+ for step in range(NO_OF_BATCHES):
+      //STEP1 TRAIN DESCRIMINATOR
+     descriminator.trainable = True
+
+    //get the real data
+    idx = np.random.randint(0,60000,HALF_BATCH)
+    real_imgs = x_train[idx]
+
+   //get the fake data
+  noise = np.random.normal(0,1, size=(HALF_BATCH,NOISE_DIM))
+ fake_imgs = generatorpredict(noise)
+
+   // Labels
+   real_y = np.ones((HALF_BATCH,1)) * 0.9
+   fake_y = np.zeros((HALF_BATCH,1))
+
+   // now,train D
+   
+   d_loss_real = descriminator.train_on_batch(real_imgs, real_y)
+   d_loss_fake = descriminator.train_on_batch(fake_imgs,real_y)
+
+   d_loss = 0.5*d_loss_real + 0.5*d_loss_fake
+
+   epoch_d_loss += d_loss
+
+   //STEP 2 TRAIN GENERATOR
+    descriminator.trainable= False
+   noise =   np.random.normal(0,1,size=(BATCH_SIZE, NOISE_DIM))
+  ground_truth_y = np.ones((BATCH_SIZE,1))
+  g_loss = model.train_on_batch(noise,ground_truth_y))
+  epoch_g_loss += g_loss
+
+   // STEP3 
+    print(" Epoch{}, Disc loss {},
+        Generator loss {}".format((epoch+1),epoch_d_loss/NO_OF_BATCHES, epoch_g_loss/NO_OF_BATCHES)
+
+   d_losses.append(epoch_d_loss / NO_OF_BATCHES)
+   g_losses.append(epoch_g_loss/ NO_OF_BATCHES)
+   
+   if (epoch+1) % 10 == 0:
+       generator.save("generator.h5")
+       display_images()         ---> every 10 images it display losses and images
+
+
+
+//Thats it  our model produces images which doesnot contain in the original Mnist dataset .
+
+
+
+
+
+
+
+
+
